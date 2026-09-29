@@ -15,22 +15,36 @@ jobs:
       - name: Pull dockcross armv5
         run: docker pull dockcross/linux-armv5
 
-      - name: Clone static-cross-bins
-        run: git clone https://github.com/llamasoft/static-cross-bins.git
-
-      - name: Build Dropbear for ARMv5
+      - name: Download and Extract
         run: |
-          cd static-cross-bins
-          make TARGET=armv5-linux-musleabi dropbear -j$(nproc)
+          wget -q https://matt.ucc.asn.au/dropbear/releases/dropbear-2022.83.tar.bz2
+          tar xf dropbear-2022.83.tar.bz2
 
-      - name: List output files
+      - name: Build Dropbear with Password Auth
         run: |
-          find static-cross-bins -name 'dropbear*' -o -name 'dbclient*' -o -name 'scp*' -o -name 'dropbearkey*' | head -50
+          docker run --rm -v "$PWD":/work -w /work dockcross/linux-armv5 bash -c '
+            set -e
+            cd /work/dropbear-2022.83
+
+            cat > localoptions.h <<EOF
+            #define DROPBEAR_SVR_PASSWORD_AUTH 1
+            #define DROPBEAR_SVR_PUBKEY_AUTH 1
+            #define DROPBEAR_CLI_PASSWORD_AUTH 1
+            #define DROPBEAR_CLI_PUBKEY_AUTH 1
+            EOF
+
+            ./configure --enable-static
+            make PROGRAMS="dropbear dbclient dropbearkey scp dropbearconvert" STATIC=1 -j$(nproc)
+
+            mkdir -p /work/output
+            cp src/dropbear src/dbclient src/dropbearkey src/scp src/dropbearconvert /work/output/
+
+            echo "===== 开始生成主机密钥 ====="
+            ./dropbearkey -t rsa -s 2048 -f /work/output/dropbear_rsa_host_key
+          '
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: dropbear-ARMv5
-          path: |
-            static-cross-bins/output/
-            static-cross-bins/bin/
+          path: output/
