@@ -33,6 +33,7 @@ jobs:
             EOF
 
             ./configure \
+              --enable-static \
               --disable-zlib \
               --disable-syslog \
               --disable-lastlog \
@@ -45,7 +46,8 @@ jobs:
 
             make PROGRAMS="dropbear dbclient dropbearkey scp" STATIC=1 -j$(nproc)
 
-            cp dropbear dbclient dropbearkey scp /work/output/
+            ls -la src/dropbear src/dbclient src/dropbearkey src/scp
+            cp src/dropbear src/dbclient src/dropbearkey src/scp /work/output/
           '
 
       - name: Build BusyBox (static)
