@@ -15,27 +15,22 @@ jobs:
       - name: Pull dockcross armv5
         run: docker pull dockcross/linux-armv5
 
-      - name: Download and Extract
-        run: |
-          wget -q https://matt.ucc.asn.au/dropbear/releases/dropbear-2022.83.tar.bz2
-          wget -q https://busybox.net/downloads/busybox-1.36.1.tar.bz2
-          tar xf dropbear-2022.83.tar.bz2
-          tar xf busybox-1.36.1.tar.bz2
+      - name: Clone static-cross-bins
+        run: git clone https://github.com/llamasoft/static-cross-bins.git
 
-      - name: Build All
+      - name: Build Dropbear for ARMv5
         run: |
-          docker run --rm -v "$PWD":/work -w /work dockcross/linux-armv5 bash -c "
-            cd dropbear-2022.83 && ./configure --enable-static --disable-zlib && make STATIC=1 -j\$(nproc)
-            cd /work/busybox-1.36.1 && make defconfig && sed -i 's/^# CONFIG_STATIC is not set/CONFIG_STATIC=y/' .config && make -j\$(nproc)
-            cd /work
-            mkdir -p output
-            cp -r /work/dropbear-2022.83 /work/output/
-            cp -r /work/busybox-1.36.1 /work/output/
-            cp /work/*.tar.bz2 /work/output/
-          "
+          cd static-cross-bins
+          make TARGET=armv5-linux-musleabi dropbear -j$(nproc)
+
+      - name: List output files
+        run: |
+          find static-cross-bins -name 'dropbear*' -o -name 'dbclient*' -o -name 'scp*' -o -name 'dropbearkey*' | head -50
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: dropbear-ARMv5
-          path: output/
+          path: |
+            static-cross-bins/output/
+            static-cross-bins/bin/
