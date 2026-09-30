@@ -19,10 +19,28 @@ jobs:
         run: |
           set -e
           cd static-cross-bins
-          
-          echo "===== 开始交叉编译 ====="
+
+          echo "===== 第一遍：拉取源码（config.sub 会失败，忽略） ====="
+          make TARGET=armv5-linux-musleabi dropbear -j$(nproc) || true
+
+          echo "===== 修补 musl-cross-make 的 config.sub 下载 ====="
+          MCMM=$(ls -d sources/musl-cross-make-* 2>/dev/null | head -1)
+          if [ -z "$MCMM" ]; then
+            echo "找不到 musl-cross-make 目录，无法修补"
+            exit 1
+          fi
+          echo "目标: $MCMM/Makefile"
+
+          # savannah gitweb 已失效，换成 GitHub 镜像；同时跳过 sha1 校验
+          sed -i 's#http://git.savannah.gnu.org/gitweb/?p=config.git;a=blob_plain;f=config.sub;hb=3d5db9ebe860#https://raw.githubusercontent.com/gcc-mirror/gcc/master/config.sub#' "$MCMM/Makefile"
+          sed -i '/sha1sum.*CONFIG_SUB_HASH/d' "$MCMM/Makefile"
+
+          # 清掉失败的临时文件，让 make 重新下载
+          rm -rf "$MCMM/sources/config.sub" "$MCMM/sources/config.sub.tmp"
+
+          echo "===== 第二遍：正式编译 ====="
           make TARGET=armv5-linux-musleabi dropbear -j$(nproc)
-          
+
           echo "===== 查找编译产物 ====="
           find . -type f \( -name 'dropbear' -o -name 'dbclient' -o -name 'dropbearkey' -o -name 'scp' -o -name 'dropbearconvert' \) | grep -v "\.o$"
 
@@ -30,7 +48,7 @@ jobs:
         run: |
           set -e
           mkdir -p final_output
-          
+
           echo "===== 寻找二进制文件并打包 ====="
           for bin in dropbear dbclient dropbearkey scp dropbearconvert; do
             f=$(find static-cross-bins -type f -name "$bin" | head -n 1)
@@ -38,18 +56,18 @@ jobs:
               cp "$f" final_output/
             fi
           done
-          
+
           if [ ! -f final_output/dropbear ]; then
             echo "!!! 致命错误：没有找到 dropbear 二进制文件，编译失败了 !!!"
             exit 1
           fi
-          
+
           chmod +x final_output/*
-          
+
           echo "===== 在云端生成主机密钥（替你做掉） ====="
           rm -f final_output/dropbear_rsa_host_key
           ssh-keygen -t rsa -b 3072 -f final_output/dropbear_rsa_host_key -N "" -m PEM
-          
+
           echo "===== 最终文件列表 ====="
           ls -la final_output/
 
